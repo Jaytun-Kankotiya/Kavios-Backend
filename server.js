@@ -5,6 +5,7 @@ import cors from 'cors'
 import cookieParser from "cookie-parser";
 import initializeDatabase from "./db/db.connection.js";
 import authRoutes from "./routes/authRoutes.js";
+import imageRouter from "./routes/imageRoutes.js";
 
 const app = express()
 app.use(express.json())
@@ -18,6 +19,8 @@ initializeDatabase()
 
 app.use('/api/auth', authRoutes)
 
+app.use('/api/images', imageRouter)
+
 
 app.get('/api/profile', (req, res) => {
     const token = req.cookies.session
@@ -26,6 +29,8 @@ app.get('/api/profile', (req, res) => {
     }
     req.json({message: "User is logged in", token})
 })
+
+
 
 
 
