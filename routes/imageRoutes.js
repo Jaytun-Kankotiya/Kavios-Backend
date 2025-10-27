@@ -2,9 +2,6 @@ import express from "express"
 import { addNewImage, deleteById, fetchAllImages, fetchImageById, updateById } from "../controllers/imageController.js"
 import { verifyToken } from "../middleware/verifyToken.js"
 import upload from "../middleware/uploadMidleware.js"
-// import upload from "../middleware/uploadMidleware.js"
-// import { uploadToCloudinary } from "../middleware/cloudinaryUpload.js"
-
 
 const imageRouter = express.Router()
 

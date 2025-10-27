@@ -2,12 +2,11 @@ import mongoose from "mongoose";
 import Image from "../models/imageModel.js";
 import Album from "../models/albumModel.js";
 
+
 export const addNewImage = async (req, res) => {
   try {
     const { albumId, name, tags, person, isFavorite, comments } = req.body;
 
-    console.log("REQ FILE:", req.file);
-    console.log("REQ BODY:", req.body);
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -22,14 +21,7 @@ export const addNewImage = async (req, res) => {
       });
     }
 
-    if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Input: Image name is required",
-      });
-    }
-
-    const album = await Album.findOne({albumId});
+    const album = await Album.findOne({ albumId });
     if (!album) {
       return res.status(404).json({
         success: false,
@@ -40,11 +32,11 @@ export const addNewImage = async (req, res) => {
     const newImage = new Image({
       albumId,
       name: name || req.file.originalname,
-      imageUrl: req.file.path,
-      publicId: req.file.filename,
+      imageUrl: req.file.path,    
+      publicId: req.file.filename,   
       tags: tags ? tags.split(",") : [],
       person: person || "",
-      isFavorite: isFavorite || false,
+      isFavorite: isFavorite === "true" || false,
       comments: comments ? JSON.parse(comments) : [],
       size: req.file.size || 0,
       uploadedAt: new Date(),
@@ -57,6 +49,7 @@ export const addNewImage = async (req, res) => {
       message: "New image uploaded successfully",
       data: savedImage,
     });
+
   } catch (error) {
     console.error(error);
     return res.status(500).json({
@@ -65,6 +58,7 @@ export const addNewImage = async (req, res) => {
     });
   }
 };
+
 
 export const fetchAllImages = async (req, res) => {
   try {
