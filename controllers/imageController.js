@@ -1,18 +1,27 @@
 import mongoose from "mongoose";
-import Album from "../models/albumModel.js";
 import Image from "../models/imageModel.js";
+import Album from "../models/albumModel.js";
 
 export const addNewImage = async (req, res) => {
   try {
-    const { albumId, name, tags, person, isFavorite, comments, size } =
-      req.body;
+    const { albumId, name, tags, person, isFavorite, comments } = req.body;
 
-    if (!albumId || !mongoose.isValidObjectId(albumId)) {
+    console.log("REQ FILE:", req.file);
+    console.log("REQ BODY:", req.body);
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Image file is required",
+      });
+    }
+
+    if (!albumId) {
       return res.status(400).json({
         success: false,
         message: "Invalid Input: Valid albumId is required",
       });
     }
+
     if (!name) {
       return res.status(400).json({
         success: false,
@@ -20,7 +29,7 @@ export const addNewImage = async (req, res) => {
       });
     }
 
-    const album = await Album.findById(albumId);
+    const album = await Album.findOne({albumId});
     if (!album) {
       return res.status(404).json({
         success: false,
@@ -30,12 +39,14 @@ export const addNewImage = async (req, res) => {
 
     const newImage = new Image({
       albumId,
-      name,
-      tags,
-      person,
+      name: name || req.file.originalname,
+      imageUrl: req.file.path,
+      publicId: req.file.filename,
+      tags: tags ? tags.split(",") : [],
+      person: person || "",
       isFavorite: isFavorite || false,
-      comments: comments || [],
-      size,
+      comments: comments ? JSON.parse(comments) : [],
+      size: req.file.size || 0,
       uploadedAt: new Date(),
     });
 
@@ -47,6 +58,7 @@ export const addNewImage = async (req, res) => {
       data: savedImage,
     });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       success: false,
       message: error.message || "Server error while uploading image",

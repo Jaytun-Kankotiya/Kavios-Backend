@@ -1,11 +1,12 @@
-import mongoose, { mongo } from "mongoose";
+import mongoose from "mongoose";
+import { v4 as uuidv4 } from "uuid";
 
 const UserSchema = new mongoose.Schema(
   {
     userId: {
       type: String,
       unique: true,
-      required: true,
+      default: () => uuidv4(),  
     },
     email: {
       type: String,
