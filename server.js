@@ -6,7 +6,7 @@ import cookieParser from "cookie-parser";
 import initializeDatabase from "./db/db.connection.js";
 import authRoutes from "./routes/authRoutes.js";
 import imageRouter from "./routes/imageRoutes.js";
-import albumRoutes from "./routes/albumRoutes.js";
+import albumRouter from "./routes/albumRoutes.js";
 
 const app = express()
 app.use(express.json())
@@ -22,7 +22,7 @@ app.use('/api/auth', authRoutes)
 
 app.use('/api/images', imageRouter)
 
-app.use('/api/albums', albumRoutes)
+app.use('/api/albums', albumRouter)
 
 
 app.get('/api/profile', (req, res) => {

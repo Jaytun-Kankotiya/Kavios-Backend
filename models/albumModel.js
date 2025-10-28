@@ -5,7 +5,7 @@ const albumSchema = new mongoose.Schema(
   {
     albumId: {
       type: String,
-      default: () => uuidv4(), 
+      default: () => uuidv4(),
       unique: true,
     },
     name: {
@@ -17,10 +17,16 @@ const albumSchema = new mongoose.Schema(
       default: "",
     },
     ownerId: {
-      type: String, 
+      type: String,
       ref: "User",
       required: true,
     },
+    isFavorite: {
+      type: Boolean,
+      default: false,
+    },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
     sharedUsers: [
       {
         email: {

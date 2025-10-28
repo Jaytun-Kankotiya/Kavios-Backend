@@ -17,10 +17,19 @@ const imageSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-
     publicId: {
       type: String,
       required: true,
+      unique: true,
+    },
+    thumbnailUrl: {
+      type: String,
+    },
+    mediumUrl: {
+      type: String,
+    },
+    largeUrl: {
+      type: String,
     },
     name: {
       type: String,
@@ -56,8 +65,18 @@ const imageSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+  }
 );
 
 const Image = mongoose.model("Image", imageSchema);
