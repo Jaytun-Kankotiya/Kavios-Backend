@@ -50,7 +50,6 @@ const imageSchema = new mongoose.Schema(
     comments: [
       {
         text: String,
-        author: String,
         createdAt: {
           type: Date,
           default: Date.now,

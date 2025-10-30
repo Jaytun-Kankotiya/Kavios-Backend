@@ -29,6 +29,12 @@ export const addNewImage = async (req, res) => {
 
     const album = await Album.findOne({ albumId });
     if (!album) {
+      try {
+        await cloudinary.uploader.destroy(req.file.filename);
+      } catch (cleanupError) {
+        console.error("Error cleaning up file:", cleanupError);
+      }
+
       return res.status(404).json({
         success: false,
         message: `Album with ID ${albumId} does not exist`,
@@ -45,11 +51,19 @@ export const addNewImage = async (req, res) => {
       thumbnailUrl: optimizedUrls.thumbnail,
       mediumUrl: optimizedUrls.medium,
       largeUrl: optimizedUrls.large,
-      tags: tags ? tags.split(",").map((tag) => tag.trim()) : [],
-      person: person || "",
-      isFavorite: isFavorite === "true" || false,
-      comments: comments ? JSON.parse(comments) : [],
-      size: req.file.size || 0,
+      tags: tags
+        ? tags
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter((tag) => tag)
+        : [],
+      person: person ? person.trim() : "",
+      isFavorite: isFavorite === "true",
+      comments:
+        comments && comments.trim()
+          ? [{ text: comments, createdAt: new Date() }]
+          : [],
+      size: req.file.size,
       uploadedAt: new Date(),
     });
 
@@ -64,8 +78,6 @@ export const addNewImage = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error uploading image:", error);
-
     if (req.file && req.file.filename) {
       try {
         await cloudinary.uploader.destroy(req.file.filename);
@@ -75,7 +87,7 @@ export const addNewImage = async (req, res) => {
     }
     return res.status(500).json({
       success: false,
-      message: error.message || "Server error while uploading image",
+      message: String(error.message) || "Server error while uploading image",
     });
   }
 };
@@ -91,7 +103,7 @@ export const fetchAllImages = async (req, res) => {
       sortBy = "newest",
     } = req.query;
 
-    let filter = {};
+    let filter = { isDeleted: false };
 
     if (albumId) {
       filter.albumId = albumId;
@@ -168,7 +180,7 @@ export const fetchAllImages = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching images:", error);
+    console.error("Error fetching images:", error.message);
     return res.status(500).json({
       success: false,
       message: error.message || "Server error while fetching images",
@@ -248,14 +260,12 @@ export const fetchAllFavoriteImages = async (req, res) => {
         ),
     }));
 
-    return res
-      .status(200)
-      .json({
-        success: false,
-        message: "Fetched all favorite images",
-        count: formattedImages.length,
-        data: formattedImages,
-      });
+    return res.status(200).json({
+      success: false,
+      message: "Fetched all favorite images",
+      count: formattedImages.length,
+      data: formattedImages,
+    });
   } catch (error) {
     console.error("Error fetching all favorite images:", error);
     return res.status(500).json({
@@ -277,7 +287,7 @@ export const updateById = async (req, res) => {
     if (!image) {
       return res.status(404).json({
         success: false,
-        message: `Image with ID ${id} not found`,
+        message: `Image not found`,
       });
     }
 
@@ -315,13 +325,12 @@ export const updateById = async (req, res) => {
   }
 };
 
-
 export const deleteById = async (req, res) => {
   try {
     const { id } = req.params;
 
     const image = await Image.findOne({
-      $or: [{ imageId: id }, { _id: id }],
+      $or: [{ imageId: id }],
     });
 
     if (!image) {

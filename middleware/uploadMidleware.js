@@ -14,7 +14,7 @@ const storage = new CloudinaryStorage({
   cloudinary,
   params: {
     folder: "Kavios_Pix",
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    allowed_formats: ["jpg", "jpeg", "png", "webp", "avif", "gif"],
     transformation: [{ width: 1920, height: 1080, crop: "limit" }],
   },
 });

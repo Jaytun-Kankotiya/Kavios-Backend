@@ -20,7 +20,7 @@ initializeDatabase()
 
 app.use('/api/auth', authRoutes)
 
-app.use('/api/images', imageRouter)
+app.use('/api/images', imageRouter);
 
 app.use('/api/albums', albumRouter)
 

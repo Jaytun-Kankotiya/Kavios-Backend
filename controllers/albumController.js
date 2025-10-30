@@ -53,12 +53,13 @@ export const fetchAlbums = async (req, res) => {
 
     const albums = await Album.find({
       $or: [{ ownerId: userId }, { "sharedUsers.email": userEmail }],
+      isDeleted: false,
     }).sort({ createdAt: -1 });
 
     const albumsWithStats = await Promise.all(
       albums.map(async (album) => {
         const imageStats = await Image.aggregate([
-          { $match: { albumId: album.albumId } },
+          { $match: { albumId: album.albumId, isDeleted: false } },
           {
             $group: {
               _id: null,
