@@ -11,7 +11,8 @@ import {
   permanentlyDeleteImage,
   emptyTrash,
   cleanupOldTrash,
-  fetchAllFavoriteImages
+  fetchAllFavoriteImages,
+  deleteMultipleImages
 } from "../controllers/imageController.js"
 import { verifyToken } from "../middleware/verifyToken.js"
 import upload from "../middleware/uploadMidleware.js"
@@ -24,7 +25,9 @@ imageRouter.get('/recent', verifyToken, fetchRecentImages)
 imageRouter.get('/favorites/all', verifyToken, fetchAllFavoriteImages)
 imageRouter.get('/:id', verifyToken, fetchImageById)
 imageRouter.patch('/:id', verifyToken, updateById)
+imageRouter.delete('/bulk-delete', verifyToken, deleteMultipleImages)
 imageRouter.delete('/:id', verifyToken, deleteById)
+
 
 imageRouter.get('/trash/all', verifyToken, fetchTrash)
 imageRouter.post('/trash/:id/restore', verifyToken, restoreImage)

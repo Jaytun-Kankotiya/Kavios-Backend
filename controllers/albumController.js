@@ -195,7 +195,7 @@ export const getAlbumImages = async (req, res) => {
       });
     }
 
-    const images = await Image.find({ albumId: id })
+    const images = await Image.find({ albumId: id, isDeleted: false })
       .sort({ uploadedAt: -1 })
       .lean();
 

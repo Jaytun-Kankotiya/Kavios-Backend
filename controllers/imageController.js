@@ -239,6 +239,7 @@ export const fetchAllFavoriteImages = async (req, res) => {
     const images = await Image.find({
       albumId: { $in: albumIds },
       isFavorite: true,
+      isDeleted: false
     })
       .sort({ uploadedAt: -1 })
       .lean();
@@ -261,7 +262,7 @@ export const fetchAllFavoriteImages = async (req, res) => {
     }));
 
     return res.status(200).json({
-      success: false,
+      success: true,
       message: "Fetched all favorite images",
       count: formattedImages.length,
       data: formattedImages,
@@ -365,6 +366,72 @@ export const deleteById = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Server error while deleting image",
+    });
+  }
+};
+
+export const deleteMultipleImages = async (req, res) => {
+  try {
+    const { imageIds } = req.body;
+
+    if (!imageIds || !Array.isArray(imageIds) || imageIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide an array of image IDs",
+      });
+    }
+
+    const images = await Image.find({
+      imageId: { $in: imageIds },
+    });
+
+    if (images.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No images found with the provided IDs",
+      });
+    }
+
+    const alreadyDeleted = images.filter(img => img.isDeleted);
+    const toDelete = images.filter(img => !img.isDeleted);
+
+    if (toDelete.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "All selected images are already in trash",
+      });
+    }
+
+    await Image.updateMany(
+      { 
+        imageId: { $in: toDelete.map(img => img.imageId) },
+        isDeleted: false 
+      },
+      { 
+        $set: { 
+          isDeleted: true, 
+          deletedAt: new Date() 
+        } 
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `${toDelete.length} image${toDelete.length > 0 ? 's' : ''} moved to trash successfully`,
+      data: {
+        deletedCount: toDelete.length,
+        alreadyDeletedCount: alreadyDeleted.length,
+        deletedImages: toDelete.map(img => ({
+          imageId: img.imageId,
+          name: img.name
+        }))
+      },
+    });
+  } catch (error) {
+    console.error("Error deleting multiple images:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Server error while deleting images",
     });
   }
 };
@@ -481,7 +548,7 @@ export const restoreImage = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Image restored successfully",
+      message: `Image ${image.name} restored successfully`,
       data: {
         imageId: image.imageId,
         name: image.name,
