@@ -1,6 +1,7 @@
+import { data } from "react-router-dom";
 import Album from "../models/albumModel.js";
 import Image from "../models/imageModel.js";
-import { formatBytes} from "../utils/utils.js";
+import { formatBytes } from "../utils/utils.js";
 import { v2 as cloudinary } from "cloudinary";
 
 export const createNewAlbum = async (req, res) => {
@@ -303,11 +304,8 @@ export const fetchAllFavoriteAlbums = async (req, res) => {
 
     const favoriteAlbums = await Album.find({
       isFavorite: true,
-      $or: [
-        { ownerId: userId },
-        { "sharedUsers.email": userEmail }
-      ],
-      isDeleted: false
+      $or: [{ ownerId: userId }, { "sharedUsers.email": userEmail }],
+      isDeleted: false,
     })
       .sort({ updatedAt: -1 })
       .lean();
@@ -317,7 +315,7 @@ export const fetchAllFavoriteAlbums = async (req, res) => {
         success: true,
         count: 0,
         data: [],
-        message: "No favorite albums found"
+        message: "No favorite albums found",
       });
     }
 
@@ -325,13 +323,13 @@ export const fetchAllFavoriteAlbums = async (req, res) => {
       favoriteAlbums.map(async (album) => {
         const imageCount = await Image.countDocuments({
           albumId: album.albumId,
-          isDeleted: false
+          isDeleted: false,
         });
 
         const favoriteImageCount = await Image.countDocuments({
           albumId: album.albumId,
           isFavorite: true,
-          isDeleted: false
+          isDeleted: false,
         });
 
         return {
@@ -345,14 +343,13 @@ export const fetchAllFavoriteAlbums = async (req, res) => {
     return res.status(200).json({
       success: true,
       count: albumsWithDetails.length,
-      data: albumsWithDetails
+      data: albumsWithDetails,
     });
-
   } catch (error) {
     console.error("Error fetching favorite albums:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Server error while fetching favorite albums"
+      message: error.message || "Server error while fetching favorite albums",
     });
   }
 };
@@ -417,6 +414,41 @@ export const updateAlbum = async (req, res) => {
   }
 };
 
+export const fetchRecentAlbumsLast7Days = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const albums = await Album.find({
+      isDeleted: false,
+      createdAt: { $gte: sevenDaysAgo },
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const formattedAlbums = albums.map((album) => ({
+      ...album,
+      formattedSize: album.size ? formatBytes(album.size) : "0 Bytes",
+      coverImage: album.coverImage || null,
+      imageCount: album.imageCount || 0,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      count: formattedAlbums.length,
+      data: formattedAlbums,
+    });
+  } catch (error) {
+    console.error("Error fetching recent albums:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Server error while fetching recent albums",
+    });
+  }
+};
 
 export const deleteAlbum = async (req, res) => {
   try {
@@ -472,25 +504,56 @@ export const fetchAlbumTrash = async (req, res) => {
       .sort({ deletedAt: -1 })
       .lean();
 
-    const formattedAlbums = albums.map((album) => ({
-      ...album,
-      daysUntilDeletion: Math.max(
-        0,
-        30 -
-          Math.floor(
-            (Date.now() - new Date(album.deletedAt)) / (1000 * 60 * 60 * 24)
-          )
-      ),
-    }));
+    if (!albums.length) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+        message: "No albums in trash",
+      });
+    }
+
+    const albumsWithStats = await Promise.all(
+      albums.map(async (album) => {
+        const imageStats = await Image.aggregate([
+          { $match: { albumId: album.albumId, isDeleted: true } },
+          {
+            $group: {
+              _id: null,
+              totalImages: { $sum: 1 },
+              totalSize: { $sum: "$size" },
+            },
+          },
+        ]);
+
+        const stats = imageStats[0] || { totalImages: 0, totalSize: 0 };
+
+        const daysUntilDeletion = Math.max(
+          0,
+          30 -
+            Math.floor(
+              (Date.now() - new Date(album.deletedAt)) / (1000 * 60 * 60 * 24)
+            )
+        );
+
+        return {
+          ...album,
+          imageCount: stats.totalImages,
+          totalSize: stats.totalSize,
+          formattedSize: formatBytes(stats.totalSize),
+          daysUntilDeletion,
+        };
+      })
+    );
 
     return res.status(200).json({
       success: true,
-      count: formattedAlbums.length,
-      data: formattedAlbums,
+      count: albumsWithStats.length,
+      data: albumsWithStats,
     });
   } catch (error) {
     console.error("Error fetching album trash:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message || "Server error while fetching album trash",
     });
@@ -500,10 +563,12 @@ export const fetchAlbumTrash = async (req, res) => {
 export const permanentlyDeleteAlbum = async (req, res) => {
   try {
     const { id } = req.params;
-    const album = await Album.findOne({ $or: [{ albumId: id }, { _id: id }] });
+    const album = await Album.findOne({ $or: [{ albumId: id }] });
 
     if (!album) {
-      return res.status(404).json({ success: false, message: "Album not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Album not found" });
     }
 
     const images = await Image.find({ albumId: album.albumId });
@@ -518,10 +583,18 @@ export const permanentlyDeleteAlbum = async (req, res) => {
     await Image.deleteMany({ albumId: album.albumId });
     await Album.deleteOne({ _id: album._id });
 
-    return res.status(200).json({ success: true, message: "Album permanently deleted" });
+    return res
+      .status(200)
+      .json({ success: true, message: "Album permanently deleted" });
   } catch (error) {
     console.error("Error permanently deleting album:", error);
-    res.status(500).json({ success: false, message: error.message || "Server error while permanently deleting album" });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message:
+          error.message || "Server error while permanently deleting album",
+      });
   }
 };
 
@@ -551,7 +624,12 @@ export const emptyAlbumTrash = async (req, res) => {
     });
   } catch (error) {
     console.error("Error emptying album trash:", error);
-    res.status(500).json({ success: false, message: error.message || "Server error while emptying album trash" });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Server error while emptying album trash",
+      });
   }
 };
 
@@ -584,7 +662,7 @@ export const restoreAlbum = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Album restored successfully",
+      message: `Album ${album.name} restored successfully`,
       data: { albumId: album.albumId, name: album.name },
     });
   } catch (error) {
@@ -599,7 +677,10 @@ export const restoreAlbum = async (req, res) => {
 export const cleanupOldAlbumTrash = async (req, res) => {
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const oldAlbums = await Album.find({ isDeleted: true, deletedAt: { $lt: thirtyDaysAgo } });
+    const oldAlbums = await Album.find({
+      isDeleted: true,
+      deletedAt: { $lt: thirtyDaysAgo },
+    });
 
     let deletedCount = 0;
     for (const album of oldAlbums) {
@@ -622,7 +703,13 @@ export const cleanupOldAlbumTrash = async (req, res) => {
     });
   } catch (error) {
     console.error("Error cleaning up old album trash:", error);
-    res.status(500).json({ success: false, message: error.message || "Server error while cleaning up old album trash" });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message:
+          error.message || "Server error while cleaning up old album trash",
+      });
   }
 };
 

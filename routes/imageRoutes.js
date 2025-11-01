@@ -34,6 +34,6 @@ imageRouter.post('/trash/:id/restore', verifyToken, restoreImage)
 imageRouter.delete('/trash/:id/permanent', verifyToken, permanentlyDeleteImage)
 imageRouter.delete('/trash/empty', verifyToken, emptyTrash)
 
-imageRouter.post('/trash/cleanup', cleanupOldTrash)
+imageRouter.delete('/trash/cleanup', cleanupOldTrash)
 
 export default imageRouter

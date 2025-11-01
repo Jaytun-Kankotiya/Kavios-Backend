@@ -16,12 +16,14 @@ import {
   emptyAlbumTrash,
   cleanupOldAlbumTrash,
   fetchAllFavoriteAlbums,
+  fetchRecentAlbumsLast7Days,
 } from "../controllers/albumController.js";
 
 const albumRouter = express.Router();
 
 albumRouter.post("/", verifyToken, createNewAlbum);
 albumRouter.get("/", verifyToken, fetchAlbums);
+albumRouter.get("/recent", verifyToken, fetchRecentAlbumsLast7Days);
 albumRouter.get("/:id", verifyToken, fetchAlbumById);
 albumRouter.patch("/:id", verifyToken, updateAlbum);
 albumRouter.delete("/:id", verifyToken, deleteAlbum);
@@ -38,6 +40,6 @@ albumRouter.post("/trash/:id/restore", verifyToken, restoreAlbum);
 albumRouter.delete("/trash/:id/permanent", verifyToken, permanentlyDeleteAlbum);
 albumRouter.delete("/trash/empty", verifyToken, emptyAlbumTrash);
 
-albumRouter.post("/trash/cleanup", verifyToken, cleanupOldAlbumTrash);
+albumRouter.delete("/trash/cleanup", verifyToken, cleanupOldAlbumTrash);
 
 export default albumRouter;

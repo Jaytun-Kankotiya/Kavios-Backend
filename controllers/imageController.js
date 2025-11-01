@@ -440,7 +440,10 @@ export const fetchRecentImages = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
 
-    const images = await Image.find({ isDeleted: false })
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+    const images = await Image.find({ isDeleted: false, uploadedAt: {$gte: sevenDaysAgo} })
       .sort({ uploadedAt: -1 })
       .limit(limit)
       .lean();
@@ -568,7 +571,7 @@ export const permanentlyDeleteImage = async (req, res) => {
     const { id } = req.params;
 
     const image = await Image.findOne({
-      $or: [{ imageId: id }, { _id: id }],
+      $or: [{ imageId: id }],
     });
 
     if (!image) {
