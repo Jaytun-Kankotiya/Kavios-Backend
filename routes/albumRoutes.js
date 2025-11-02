@@ -17,6 +17,7 @@ import {
   cleanupOldAlbumTrash,
   fetchAllFavoriteAlbums,
   fetchRecentAlbumsLast7Days,
+  fetchSharedAlbums,
 } from "../controllers/albumController.js";
 
 const albumRouter = express.Router();
@@ -24,6 +25,8 @@ const albumRouter = express.Router();
 albumRouter.post("/", verifyToken, createNewAlbum);
 albumRouter.get("/", verifyToken, fetchAlbums);
 albumRouter.get("/recent", verifyToken, fetchRecentAlbumsLast7Days);
+albumRouter.get("/shared", verifyToken, fetchSharedAlbums);
+
 albumRouter.get("/:id", verifyToken, fetchAlbumById);
 albumRouter.patch("/:id", verifyToken, updateAlbum);
 albumRouter.delete("/:id", verifyToken, deleteAlbum);

@@ -429,12 +429,20 @@ export const fetchRecentAlbumsLast7Days = async (req, res) => {
       .limit(limit)
       .lean();
 
-    const formattedAlbums = albums.map((album) => ({
-      ...album,
-      formattedSize: album.size ? formatBytes(album.size) : "0 Bytes",
-      coverImage: album.coverImage || null,
-      imageCount: album.imageCount || 0,
-    }));
+    const formattedAlbums = await Promise.all(
+      albums.map(async (album) => {
+        const images = await Image.find({ albumId: album.albumId }).lean();
+        const count = images.length;
+        const totalSize = images.reduce((acc, img) => acc + (img.size || 0), 0);
+
+        return {
+          ...album,
+          coverImage: album.coverImage || null,
+          imageCount: count,
+          formattedSize: totalSize ? formatBytes(totalSize) : "0 Bytes",
+        };
+      })
+    );
 
     return res.status(200).json({
       success: true,
@@ -588,13 +596,10 @@ export const permanentlyDeleteAlbum = async (req, res) => {
       .json({ success: true, message: "Album permanently deleted" });
   } catch (error) {
     console.error("Error permanently deleting album:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message:
-          error.message || "Server error while permanently deleting album",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Server error while permanently deleting album",
+    });
   }
 };
 
@@ -624,12 +629,10 @@ export const emptyAlbumTrash = async (req, res) => {
     });
   } catch (error) {
     console.error("Error emptying album trash:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Server error while emptying album trash",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Server error while emptying album trash",
+    });
   }
 };
 
@@ -703,13 +706,36 @@ export const cleanupOldAlbumTrash = async (req, res) => {
     });
   } catch (error) {
     console.error("Error cleaning up old album trash:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message:
-          error.message || "Server error while cleaning up old album trash",
-      });
+    res.status(500).json({
+      success: false,
+      message:
+        error.message || "Server error while cleaning up old album trash",
+    });
+  }
+};
+
+export const fetchSharedAlbums = async (req, res) => {
+  try {
+    const userEmail = req.user.email.toLowerCase();
+
+    const sharedAlbums = await Album.find({
+      "sharedUsers.email": { $regex: new RegExp(`^${userEmail}$`, "i") },
+    }).sort({ updatedAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: `Found ${sharedAlbums.length} shared album${
+        sharedAlbums.length > 1 ? "s" : ""
+      }`,
+      count: sharedAlbums.length,
+      data: sharedAlbums,
+    });
+  } catch (error) {
+    console.error("Error fetching shared albums:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Server error while fetching shared albums",
+    });
   }
 };
 
