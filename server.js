@@ -7,6 +7,7 @@ import initializeDatabase from "./db/db.connection.js";
 import authRoutes from "./routes/authRoutes.js";
 import imageRouter from "./routes/imageRoutes.js";
 import albumRouter from "./routes/albumRoutes.js";
+import userRouter from './routes/userRoutes.js';
 
 const app = express()
 app.use(express.json())
@@ -19,6 +20,8 @@ app.use(cors({
 initializeDatabase()
 
 app.use('/api/auth', authRoutes)
+
+app.use('/api/user', userRouter)
 
 app.use('/api/images', imageRouter);
 

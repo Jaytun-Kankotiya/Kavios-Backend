@@ -47,6 +47,3 @@ albumRouter.delete("/trash/cleanup", verifyToken, cleanupOldAlbumTrash);
 
 export default albumRouter;
 
-
-
-
