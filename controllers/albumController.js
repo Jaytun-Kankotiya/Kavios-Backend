@@ -108,7 +108,7 @@ export const fetchAlbumById = async (req, res) => {
     const userEmail = req.user.email;
     const userId = req.user.userId;
 
-    const album = await Album.findOne({ albumId: albumId });
+    const album = await Album.findOne({ albumId: id });
 
     if (!album) {
       return res.status(404).json({
