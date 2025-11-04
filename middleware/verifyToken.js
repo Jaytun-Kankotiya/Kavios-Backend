@@ -1,11 +1,13 @@
-
 import jwt from "jsonwebtoken";
 
 export const verifyToken = (req, res, next) => {
   try {
-    const token =
-      req.cookies?.token ||
-      (req.headers.authorization && req.headers.authorization.split(" ")[1]);
+    const authHeader = req.headers.authorization;
+    let token = null;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
 
     if (!token) {
       return res.status(401).json({ success: false, message: "No token provided" });
@@ -16,6 +18,6 @@ export const verifyToken = (req, res, next) => {
     next();
   } catch (error) {
     console.error("JWT verification error:", error.message);
+    return res.status(401).json({ success: false, message: "Invalid or expired token" });
   }
 };
-

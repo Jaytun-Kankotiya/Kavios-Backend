@@ -63,14 +63,11 @@ export const googleAuth = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'Lax',
-      maxAge: 24 * 60 * 60 * 1000,
+    res.status(200).json({ 
+      message: "Login successful", 
+      user,
+      token 
     });
-
-    res.status(200).json({ message: "Login successful", user });
   } catch (error) {
     console.error("Google OAuth error:", error.message);
     res.status(400).json({
