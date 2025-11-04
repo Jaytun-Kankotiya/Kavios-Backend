@@ -29,7 +29,7 @@ app.use('/api/albums', albumRouter)
 
 
 app.get('/api/profile', (req, res) => {
-    const token = req.cookies.session
+    const token = req.cookies.token
     if(!token){
         return res.status(401).json({error: "Unautorized"})
     }
