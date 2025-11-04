@@ -1,4 +1,3 @@
-import { data } from "react-router-dom";
 import Album from "../models/albumModel.js";
 import Image from "../models/imageModel.js";
 import { formatBytes } from "../utils/utils.js";
@@ -49,11 +48,10 @@ export const createNewAlbum = async (req, res) => {
 
 export const fetchAlbums = async (req, res) => {
   try {
-    const userEmail = req.user.email;
     const userId = req.user.userId;
 
     const albums = await Album.find({
-      $or: [{ ownerId: userId }, { "sharedUsers.email": userEmail }],
+      ownerId: userId,  
       isDeleted: false,
     }).sort({ createdAt: -1 });
 
@@ -85,7 +83,7 @@ export const fetchAlbums = async (req, res) => {
           totalSize: stats.totalSize,
           formattedSize: formatBytes(stats.totalSize),
           favoriteCount: stats.favoriteCount,
-          isOwner: album.ownerId === userId,
+          isOwner: true,  
         };
       })
     );
@@ -299,12 +297,11 @@ export const getAlbumFavorites = async (req, res) => {
 
 export const fetchAllFavoriteAlbums = async (req, res) => {
   try {
-    const userEmail = req.user.email;
     const userId = req.user.userId;
 
     const favoriteAlbums = await Album.find({
       isFavorite: true,
-      $or: [{ ownerId: userId }, { "sharedUsers.email": userEmail }],
+      ownerId: userId,
       isDeleted: false,
     })
       .sort({ updatedAt: -1 })
@@ -319,23 +316,33 @@ export const fetchAllFavoriteAlbums = async (req, res) => {
       });
     }
 
+    const formatSize = (bytes) => {
+      if (!bytes || bytes <= 0) return "0 Bytes";
+      const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(2))} ${sizes[i]}`;
+    };
+
     const albumsWithDetails = await Promise.all(
       favoriteAlbums.map(async (album) => {
-        const imageCount = await Image.countDocuments({
+        const images = await Image.find({
           albumId: album.albumId,
           isDeleted: false,
-        });
+        }).select("size isFavorite");
 
-        const favoriteImageCount = await Image.countDocuments({
-          albumId: album.albumId,
-          isFavorite: true,
-          isDeleted: false,
-        });
+        const totalImages = images.length;
+        const favoriteImages = images.filter((img) => img.isFavorite).length;
+        const totalSizeBytes = images.reduce(
+          (acc, img) => acc + (img.size || 0),
+          0
+        );
 
         return {
           ...album,
-          totalImages: imageCount,
-          favoriteImages: favoriteImageCount,
+          totalImages,
+          favoriteImages,
+          totalSize: totalSizeBytes,
+          formattedSize: formatSize(totalSizeBytes),
         };
       })
     );
@@ -349,7 +356,8 @@ export const fetchAllFavoriteAlbums = async (req, res) => {
     console.error("Error fetching favorite albums:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Server error while fetching favorite albums",
+      message:
+        error.message || "Server error while fetching favorite albums",
     });
   }
 };
@@ -416,6 +424,7 @@ export const updateAlbum = async (req, res) => {
 
 export const fetchRecentAlbumsLast7Days = async (req, res) => {
   try {
+    const userId = req.user.userId;
     const limit = parseInt(req.query.limit) || 100;
 
     const sevenDaysAgo = new Date();
@@ -424,6 +433,7 @@ export const fetchRecentAlbumsLast7Days = async (req, res) => {
     const albums = await Album.find({
       isDeleted: false,
       createdAt: { $gte: sevenDaysAgo },
+      ownerId: userId, 
     })
       .sort({ createdAt: -1 })
       .limit(limit)
@@ -508,7 +518,12 @@ export const deleteAlbum = async (req, res) => {
 
 export const fetchAlbumTrash = async (req, res) => {
   try {
-    const albums = await Album.find({ isDeleted: true })
+    const userId = req.user.userId;
+
+    const albums = await Album.find({ 
+      isDeleted: true,
+      ownerId: userId,  
+    })
       .sort({ deletedAt: -1 })
       .lean();
 
@@ -571,12 +586,21 @@ export const fetchAlbumTrash = async (req, res) => {
 export const permanentlyDeleteAlbum = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.userId;
+
     const album = await Album.findOne({ $or: [{ albumId: id }] });
 
     if (!album) {
       return res
         .status(404)
         .json({ success: false, message: "Album not found" });
+    }
+
+    if (album.ownerId !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "Only album owner can permanently delete",
+      });
     }
 
     const images = await Image.find({ albumId: album.albumId });
@@ -605,10 +629,20 @@ export const permanentlyDeleteAlbum = async (req, res) => {
 
 export const emptyAlbumTrash = async (req, res) => {
   try {
-    const trashedAlbums = await Album.find({ isDeleted: true });
+    const userEmail = req.user.email;
+    const userId = req.user.userId;
+
+    const trashedAlbums = await Album.find({ 
+      isDeleted: true,
+      $or: [{ ownerId: userId }, { "sharedUsers.email": userEmail }],
+    });
 
     let totalDeletedImages = 0;
     for (const album of trashedAlbums) {
+      if (album.ownerId !== userId) {
+        continue;
+      }
+
       const images = await Image.find({ albumId: album.albumId });
       for (const image of images) {
         try {
@@ -621,7 +655,10 @@ export const emptyAlbumTrash = async (req, res) => {
       totalDeletedImages += result.deletedCount;
     }
 
-    const result = await Album.deleteMany({ isDeleted: true });
+    const result = await Album.deleteMany({ 
+      isDeleted: true,
+      ownerId: userId,
+    });
 
     return res.status(200).json({
       success: true,
@@ -639,6 +676,8 @@ export const emptyAlbumTrash = async (req, res) => {
 export const restoreAlbum = async (req, res) => {
   try {
     const { id } = req.params;
+    const userEmail = req.user.email;
+    const userId = req.user.userId;
 
     const album = await Album.findOne({ $or: [{ albumId: id }] });
 
@@ -646,6 +685,17 @@ export const restoreAlbum = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Album not found" });
+    }
+
+    const hasAccess =
+      album.ownerId === userId ||
+      album.sharedUsers.some((u) => u.email === userEmail);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "You don't have access to this album",
+      });
     }
 
     if (!album.isDeleted) {
@@ -679,10 +729,14 @@ export const restoreAlbum = async (req, res) => {
 
 export const cleanupOldAlbumTrash = async (req, res) => {
   try {
+    const userId = req.user.userId;
+
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    
     const oldAlbums = await Album.find({
       isDeleted: true,
       deletedAt: { $lt: thirtyDaysAgo },
+      ownerId: userId,  
     });
 
     let deletedCount = 0;
@@ -716,19 +770,54 @@ export const cleanupOldAlbumTrash = async (req, res) => {
 
 export const fetchSharedAlbums = async (req, res) => {
   try {
-    const userEmail = req.user.email.toLowerCase();
+    const userEmail = req.user.email;
+    const userId = req.user.userId;
 
     const sharedAlbums = await Album.find({
-      "sharedUsers.email": { $regex: new RegExp(`^${userEmail}$`, "i") },
+      "sharedUsers.email": userEmail,
+      ownerId: { $ne: userId },
+      isDeleted: false,
     }).sort({ updatedAt: -1 });
+
+    const albumsWithStats = await Promise.all(
+      sharedAlbums.map(async (album) => {
+        const imageStats = await Image.aggregate([
+          { $match: { albumId: album.albumId, isDeleted: false } },
+          {
+            $group: {
+              _id: null,
+              totalImages: { $sum: 1 },
+              totalSize: { $sum: "$size" },
+              favoriteCount: {
+                $sum: { $cond: ["$isFavorite", 1, 0] },
+              },
+            },
+          },
+        ]);
+
+        const stats = imageStats[0] || {
+          totalImages: 0,
+          totalSize: 0,
+          favoriteCount: 0,
+        };
+
+        return {
+          ...album.toObject(),
+          imageCount: stats.totalImages,
+          totalSize: stats.totalSize,
+          formattedSize: formatBytes(stats.totalSize),
+          favoriteCount: stats.favoriteCount,
+          isOwner: false,
+          sharedBy: album.ownerId,
+        };
+      })
+    );
 
     return res.status(200).json({
       success: true,
-      message: `Found ${sharedAlbums.length} shared album${
-        sharedAlbums.length > 1 ? "s" : ""
-      }`,
-      count: sharedAlbums.length,
-      data: sharedAlbums,
+      count: albumsWithStats.length,
+      data: albumsWithStats,
+      message: `Found ${albumsWithStats.length} shared album(s)`,
     });
   } catch (error) {
     console.error("Error fetching shared albums:", error);

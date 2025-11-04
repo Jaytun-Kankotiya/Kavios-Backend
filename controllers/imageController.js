@@ -94,6 +94,8 @@ export const addNewImage = async (req, res) => {
 
 export const fetchAllImages = async (req, res) => {
   try {
+    const userId = req.user.userId;
+
     const {
       albumId,
       tags,
@@ -103,9 +105,38 @@ export const fetchAllImages = async (req, res) => {
       sortBy = "newest",
     } = req.query;
 
-    let filter = { isDeleted: false };
+    const accessibleAlbums = await Album.find({
+      ownerId: userId,
+      isDeleted: false
+    }).select("albumId");
+
+    if (!accessibleAlbums.length) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+        filters: {
+          albumId: albumId || null,
+          tags: tags || null,
+          person: person || null,
+          isFavorite: isFavorite || null,
+          search: search || null,
+          sortBy,
+        },
+      });
+    }
+
+    const albumIds = accessibleAlbums.map((a) => a.albumId);
+
+    let filter = { isDeleted: false, albumId: { $in: albumIds } };
 
     if (albumId) {
+      if (!albumIds.includes(albumId)) {
+        return res.status(403).json({
+          success: false,
+          message: "You don't have access to this album",
+        });
+      }
       filter.albumId = albumId;
     }
 
@@ -190,6 +221,8 @@ export const fetchAllImages = async (req, res) => {
 
 export const fetchImageById = async (req, res) => {
   try {
+    const userEmail = req.user.email;
+    const userId = req.user.userId;
     const { id } = req.params;
 
     const image = await Image.findOne({
@@ -200,6 +233,18 @@ export const fetchImageById = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: `Image with ID ${id} not found`,
+      });
+    }
+
+    const album = await Album.findOne({
+      albumId: image.albumId,
+      $or: [{ ownerId: userId }, { "sharedUsers.email": userEmail }],
+    });
+
+    if (!album) {
+      return res.status(403).json({
+        success: false,
+        message: "You don't have access to this image",
       });
     }
 
@@ -221,17 +266,20 @@ export const fetchImageById = async (req, res) => {
 
 export const fetchAllFavoriteImages = async (req, res) => {
   try {
-    const userEmail = req.user.email;
     const userId = req.user.userId;
 
     const accessibleAlbums = await Album.find({
-      $or: [{ ownerId: userId }, { "sharedUsers.email": userEmail }],
+      ownerId: userId,
+      isDeleted: false
     }).select("albumId name");
 
     if (!accessibleAlbums.length) {
-      return res
-        .status(404)
-        .json({ success: false, message: "No albums found for this user" });
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+        message: "No albums found for this user"
+      });
     }
 
     const albumIds = accessibleAlbums.map((a) => a.albumId);
@@ -278,6 +326,7 @@ export const fetchAllFavoriteImages = async (req, res) => {
 
 export const updateById = async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { id } = req.params;
     const { name, tags, person, isFavorite, comments, isDeleted } = req.body;
 
@@ -289,6 +338,18 @@ export const updateById = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: `Image not found`,
+      });
+    }
+
+    const album = await Album.findOne({
+      albumId: image.albumId,
+      ownerId: userId
+    });
+
+    if (!album) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only update images from albums you own",
       });
     }
 
@@ -328,6 +389,7 @@ export const updateById = async (req, res) => {
 
 export const deleteById = async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { id } = req.params;
 
     const image = await Image.findOne({
@@ -338,6 +400,17 @@ export const deleteById = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: `Image with ID ${id} not found`,
+      });
+    }
+    const album = await Album.findOne({
+      albumId: image.albumId,
+      ownerId: userId
+    });
+
+    if (!album) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only delete images from albums you own",
       });
     }
 
@@ -372,6 +445,7 @@ export const deleteById = async (req, res) => {
 
 export const deleteMultipleImages = async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { imageIds } = req.body;
 
     if (!imageIds || !Array.isArray(imageIds) || imageIds.length === 0) {
@@ -389,6 +463,21 @@ export const deleteMultipleImages = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "No images found with the provided IDs",
+      });
+    }
+
+    const albumIds = [...new Set(images.map(img => img.albumId))];
+
+    const albums = await Album.find({
+      albumId: { $in: albumIds },
+      ownerId: userId
+    });
+
+    // If the number of owned albums doesn't match, user doesn't own all albums
+    if (albums.length !== albumIds.length) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only delete images from albums you own",
       });
     }
 
@@ -417,7 +506,7 @@ export const deleteMultipleImages = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `${toDelete.length} image${toDelete.length > 0 ? 's' : ''} moved to trash successfully`,
+      message: `${toDelete.length} image${toDelete.length > 1 ? 's' : ''} moved to trash successfully`,
       data: {
         deletedCount: toDelete.length,
         alreadyDeletedCount: alreadyDeleted.length,
@@ -438,12 +527,32 @@ export const deleteMultipleImages = async (req, res) => {
 
 export const fetchRecentImages = async (req, res) => {
   try {
+    const userId = req.user.userId;
     const limit = parseInt(req.query.limit) || 100;
+
+    const accessibleAlbums = await Album.find({
+      ownerId: userId,
+      isDeleted: false
+    }).select("albumId");
+
+    if (!accessibleAlbums.length) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+      });
+    }
+
+    const albumIds = accessibleAlbums.map((a) => a.albumId);
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-    const images = await Image.find({ isDeleted: false, uploadedAt: {$gte: sevenDaysAgo} })
+    const images = await Image.find({ 
+      isDeleted: false, 
+      uploadedAt: {$gte: sevenDaysAgo},
+      albumId: { $in: albumIds }
+    })
       .sort({ uploadedAt: -1 })
       .limit(limit)
       .lean();
@@ -481,7 +590,26 @@ export const fetchRecentImages = async (req, res) => {
 
 export const fetchTrash = async (req, res) => {
   try {
-    const images = await Image.find({ isDeleted: true })
+    const userId = req.user.userId;
+
+    const accessibleAlbums = await Album.find({
+      ownerId: userId
+    }).select("albumId");
+
+    if (!accessibleAlbums.length) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+      });
+    }
+
+    const albumIds = accessibleAlbums.map((a) => a.albumId);
+
+    const images = await Image.find({ 
+      isDeleted: true,
+      albumId: { $in: albumIds }
+    })
       .sort({ deletedAt: -1 })
       .lean();
 
@@ -525,6 +653,7 @@ export const fetchTrash = async (req, res) => {
 
 export const restoreImage = async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { id } = req.params;
 
     const image = await Image.findOne({
@@ -535,6 +664,18 @@ export const restoreImage = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: `Image with ID ${id} not found`,
+      });
+    }
+
+    const album = await Album.findOne({
+      albumId: image.albumId,
+      ownerId: userId
+    });
+
+    if (!album) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only restore images from albums you own",
       });
     }
 
@@ -568,6 +709,7 @@ export const restoreImage = async (req, res) => {
 
 export const permanentlyDeleteImage = async (req, res) => {
   try {
+    const userId = req.user.userId;
     const { id } = req.params;
 
     const image = await Image.findOne({
@@ -578,6 +720,18 @@ export const permanentlyDeleteImage = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: `Image with ID ${id} not found`,
+      });
+    }
+
+    const album = await Album.findOne({
+      albumId: image.albumId,
+      ownerId: userId
+    });
+
+    if (!album) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only permanently delete images from albums you own",
       });
     }
 
@@ -608,7 +762,26 @@ export const permanentlyDeleteImage = async (req, res) => {
 
 export const emptyTrash = async (req, res) => {
   try {
-    const deletedImages = await Image.find({ isDeleted: true });
+    const userId = req.user.userId;
+
+    const accessibleAlbums = await Album.find({
+      ownerId: userId
+    }).select("albumId");
+
+    if (!accessibleAlbums.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No images to delete",
+        deletedCount: 0,
+      });
+    }
+
+    const albumIds = accessibleAlbums.map((a) => a.albumId);
+
+    const deletedImages = await Image.find({ 
+      isDeleted: true,
+      albumId: { $in: albumIds }
+    });
 
     for (const image of deletedImages) {
       try {
@@ -621,7 +794,10 @@ export const emptyTrash = async (req, res) => {
       }
     }
 
-    const result = await Image.deleteMany({ isDeleted: true });
+    const result = await Image.deleteMany({ 
+      isDeleted: true,
+      albumId: { $in: albumIds }
+    });
 
     return res.status(200).json({
       success: true,
@@ -637,13 +813,30 @@ export const emptyTrash = async (req, res) => {
   }
 };
 
-export const cleanupOldTrash = async (req, res) => {
+export const cleanupOldTrash = async (req, res) => { 
   try {
+    const userId = req.user.userId;
+
+    const accessibleAlbums = await Album.find({
+      ownerId: userId
+    }).select("albumId");
+
+    if (!accessibleAlbums.length) {
+      return res.status(200).json({
+        success: true,
+        message: "No images to clean up",
+        deletedCount: 0,
+      });
+    }
+
+    const albumIds = accessibleAlbums.map((a) => a.albumId);
+
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     const oldDeletedImages = await Image.find({
       isDeleted: true,
       deletedAt: { $lt: thirtyDaysAgo },
+      albumId: { $in: albumIds }
     });
 
     for (const image of oldDeletedImages) {
@@ -660,6 +853,7 @@ export const cleanupOldTrash = async (req, res) => {
     const result = await Image.deleteMany({
       isDeleted: true,
       deletedAt: { $lt: thirtyDaysAgo },
+      albumId: { $in: albumIds }
     });
 
     return res.status(200).json({
@@ -672,6 +866,66 @@ export const cleanupOldTrash = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Server error while cleaning up trash",
+    });
+  }
+};
+
+export const fetchSharedImages = async (req, res) => {
+  try {
+    const userEmail = req.user.email;
+    const userId = req.user.userId;
+
+    const sharedAlbums = await Album.find({
+      "sharedUsers.email": userEmail,
+      ownerId: { $ne: userId },
+      isDeleted: false,
+    }).select("albumId");
+
+    if (!sharedAlbums.length) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+        message: "No shared images found",
+      });
+    }
+
+    const albumIds = sharedAlbums.map((a) => a.albumId);
+
+    const images = await Image.find({
+      albumId: { $in: albumIds },
+      isDeleted: false,
+    })
+      .sort({ uploadedAt: -1 })
+      .lean();
+
+    const formattedImages = images.map((img) => ({
+      ...img,
+      formattedSize: formatBytes(img.size),
+      thumbnailUrl:
+        img.thumbnailUrl ||
+        img.imageUrl.replace(
+          "/upload/",
+          "/upload/w_300,h_300,c_fill,q_auto,f_auto/"
+        ),
+      mediumUrl:
+        img.mediumUrl ||
+        img.imageUrl.replace(
+          "/upload/",
+          "/upload/w_800,h_800,c_limit,q_auto,f_auto/"
+        ),
+    }));
+
+    return res.status(200).json({
+      success: true,
+      count: formattedImages.length,
+      data: formattedImages,
+    });
+  } catch (error) {
+    console.error("Error fetching shared images:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Server error while fetching shared images",
     });
   }
 };
