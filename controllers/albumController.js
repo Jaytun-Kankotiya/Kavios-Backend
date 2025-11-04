@@ -104,7 +104,7 @@ export const fetchAlbums = async (req, res) => {
 
 export const fetchAlbumById = async (req, res) => {
   try {
-    const { albumId } = req.params;
+    const { id } = req.params;
     const userEmail = req.user.email;
     const userId = req.user.userId;
 
