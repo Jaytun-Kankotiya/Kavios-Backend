@@ -7,6 +7,12 @@
 ![MongoDB](https://img.shields.io/badge/MongoDB-6.x-green.svg) 
 ![Cloudinary](https://img.shields.io/badge/Cloudinary-Storage-blue.svg)
 
+---
+## Demo Link
+[Live Demo](https://kavios-pix.vercel.app)
+
+---
+
 ## ✨ Features
 
 - **Authentication**: JWT-based auth with bcrypt password hashing
